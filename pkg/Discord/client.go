@@ -15,7 +15,7 @@ type Application struct {
 	HandlerMap         map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
 }
 
-func NewClient() *Application {
+func NewApplication() *Application {
 	tkn := os.Getenv("TOKEN")
 
 	if tkn == "" {
