@@ -31,6 +31,7 @@ func NewClient() *Application {
 	a := &Application{
 		Client,
 		[]*discordgo.ApplicationCommand{},
+
 		HandlerMap,
 	}
 	return a
