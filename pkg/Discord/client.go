@@ -12,12 +12,12 @@ type Application struct {
 	Client             *discordgo.Session
 	RegisteredCommands []*discordgo.ApplicationCommand
 	HandlerMap         map[string]HandlerFunc
-	GuildConfiguration map[string]GuildConfiguration
+	GuildMap           map[string]GuildConfiguration
 	Logger             *log.Logger
 }
 
 type GuildConfiguration struct {
-	GuildID          string
+	ID               string
 	ConfiguredTokens []string
 	ChannelID        string
 	MessageID        string
@@ -38,8 +38,8 @@ func NewApplication() *Application {
 	}
 
 	app := &Application{
-		Client:             Client,
-		GuildConfiguration: make(map[string]GuildConfiguration),
+		Client:   Client,
+		GuildMap: make(map[string]GuildConfiguration),
 		HandlerMap: map[string]HandlerFunc{
 			"add-currency": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
 				a.AddCurrency(s, i)
@@ -67,7 +67,7 @@ func (a *Application) AddHandlers() {
 	//Guild Join Handler
 	a.Client.AddHandler(func(s *discordgo.Session, i *discordgo.GuildCreate) {
 
-		a.RegisterCommands(i.Guild.ID, RawCommands)
+		a.RegisterCommands(i.Guild.ID)
 		a.InitGuildConfig(i.Guild.ID)
 	})
 	//Guild Leave Handler
@@ -87,11 +87,11 @@ func (a *Application) AddHandlers() {
 
 }
 
-func (a *Application) RegisterCommands(guildID string, commands []*discordgo.ApplicationCommand) []*discordgo.ApplicationCommand {
+func (a *Application) RegisterCommands(guildID string) []*discordgo.ApplicationCommand {
 	a.LogRequest("registering commands for guild", guildID)
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
+	registeredCommands := make([]*discordgo.ApplicationCommand, len(RawCommands))
 
-	cmd, err := a.Client.ApplicationCommandBulkOverwrite(a.Client.State.User.ID, guildID, commands)
+	cmd, err := a.Client.ApplicationCommandBulkOverwrite(a.Client.State.User.ID, guildID, RawCommands)
 	if err != nil {
 		a.LogError(err)
 		os.Exit(1)
@@ -131,8 +131,8 @@ func (a *Application) ModifyEmbed(guildID, channelID, messageID string, payload 
 
 func (a *Application) InitGuildConfig(guildID string) {
 	a.LogRequest("populating guild", guildID)
-	a.GuildConfiguration[guildID] = GuildConfiguration{
-		GuildID:          guildID,
+	a.GuildMap[guildID] = GuildConfiguration{
+		ID:               guildID,
 		ConfiguredTokens: []string{},
 		ChannelID:        "",
 		MessageID:        "",
@@ -142,10 +142,10 @@ func (a *Application) InitGuildConfig(guildID string) {
 
 func (a *Application) ConfigureGuild(guildID, channelID, messageID string, newTokens []string) {
 	a.LogRequest("configuring guild", guildID)
-	cfg, ok := a.GuildConfiguration[guildID]
+	cfg, ok := a.GuildMap[guildID]
 	if !ok {
 		a.InitGuildConfig(guildID)
-		cfg = a.GuildConfiguration[guildID]
+		cfg = a.GuildMap[guildID]
 	}
 	if cfg.ChannelID != "" {
 		cfg.ChannelID = channelID
@@ -160,7 +160,7 @@ func (a *Application) ConfigureGuild(guildID, channelID, messageID string, newTo
 
 func (a *Application) removeGuild(guildID string) {
 	a.LogRequest("removing guild", guildID)
-	delete(a.GuildConfiguration, guildID)
+	delete(a.GuildMap, guildID)
 }
 
 func (a *Application) LogError(error error) {

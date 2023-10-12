@@ -2,6 +2,8 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
+	"os"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -16,12 +18,13 @@ type Guild struct {
 	MessageID        string
 }
 
-func NewDatabase() (*Database, error) {
+func NewDatabase() *Database {
 	db, err := sql.Open("sqlite3", "./data.db")
 	if err != nil {
-		return nil, err
+		fmt.Println(err)
+		os.Exit(1)
 	}
-	return &Database{db}, nil
+	return &Database{db}
 }
 
 func (d *Database) CreateTables() error {
@@ -35,6 +38,24 @@ func (d *Database) CreateTables() error {
 		return err
 	}
 	return nil
+}
+
+func (d *Database) GetConfig() ([]Guild, error) {
+	var gs []Guild
+	rows, err := d.Query(`SELECT * FROM guilds`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var g Guild
+		err := rows.Scan(&g.ID, &g.ConfiguredTokens, &g.ChannelID, &g.MessageID)
+		if err != nil {
+			return nil, err
+		}
+		gs = append(gs, g)
+	}
+	return gs, nil
 }
 
 func (d *Database) GetGuild(id string) (Guild, error) {
