@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -33,7 +34,12 @@ func (c *Client) GetCoins() ([]Coin, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer data.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			c.LogRequest("Error closing body", err.Error())
+		}
+	}(data.Body)
 
 	var res []Coin
 	err = json.NewDecoder(data.Body).Decode(&res)
@@ -59,7 +65,12 @@ func (c *Client) GetTokenPrices(tokenName []string) (TokenPriceResponse, error) 
 	if err != nil {
 		return TokenPriceResponse{}, err
 	}
-	defer data.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			c.LogRequest("Error closing body", err.Error())
+		}
+	}(data.Body)
 
 	var res TokenPriceResponse
 	err = json.NewDecoder(data.Body).Decode(&res)
@@ -88,7 +99,12 @@ func (c *Client) GetDeFiData() (DefiDataRes, error) {
 	if err != nil {
 		return DefiDataRes{}, err
 	}
-	defer data.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			c.LogRequest("Error closing body", err.Error())
+		}
+	}(data.Body)
 	var res DefiDataRes
 	err = json.NewDecoder(data.Body).Decode(&res)
 	if err != nil {
@@ -97,6 +113,6 @@ func (c *Client) GetDeFiData() (DefiDataRes, error) {
 	return res, nil
 }
 
-func (c *Client) LogRequest(method string) {
+func (c *Client) LogRequest(method ...string) {
 	c.Logger.Printf("%v", method)
 }

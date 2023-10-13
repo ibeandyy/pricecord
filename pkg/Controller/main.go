@@ -31,7 +31,8 @@ func (c *Controller) Initialize() {
 	if err != nil {
 
 	}
-
+	//Load config from database if exists
+	//
 }
 
 func (c *Controller) LogRequest(message ...string) {

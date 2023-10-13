@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -10,6 +11,7 @@ import (
 
 type Database struct {
 	*sql.DB
+	Logger *log.Logger
 }
 type Guild struct {
 	ID               string
@@ -24,7 +26,8 @@ func NewDatabase() *Database {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	return &Database{db}
+	return &Database{db,
+		log.New(log.Writer(), "Database", log.LstdFlags)}
 }
 
 func (d *Database) CreateTables() error {
@@ -46,7 +49,12 @@ func (d *Database) GetConfig() ([]Guild, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			d.LogRequest("Error closing rows", err.Error())
+		}
+	}()
 	for rows.Next() {
 		var g Guild
 		err := rows.Scan(&g.ID, &g.ConfiguredTokens, &g.ChannelID, &g.MessageID)
@@ -89,4 +97,8 @@ func (d *Database) RemoveGuild(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (d *Database) LogRequest(message ...string) {
+	log.Printf("[I] %v", message)
 }
