@@ -2,18 +2,20 @@ package discord
 
 import (
 	"fmt"
+	"github.com/bwmarrin/discordgo"
 	"log"
 	"os"
-
-	"github.com/bwmarrin/discordgo"
+	"sync"
 )
 
 type Application struct {
 	Client             *discordgo.Session
 	RegisteredCommands []*discordgo.ApplicationCommand
 	HandlerMap         map[string]HandlerFunc
+	GuildMapMutex      sync.RWMutex
 	GuildMap           map[string]GuildConfiguration
 	Logger             *log.Logger
+	Event              chan Event
 }
 
 type GuildConfiguration struct {
@@ -42,10 +44,10 @@ func NewApplication() *Application {
 		GuildMap: make(map[string]GuildConfiguration),
 		HandlerMap: map[string]HandlerFunc{
 			"add-currency": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
-				a.AddCurrency(s, i)
+				go a.AddCurrency(s, i)
 			},
 			"remove-currency": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
-				a.RemoveCurrency(s, i)
+				go a.RemoveCurrency(s, i)
 			},
 		},
 		Logger: log.New(log.Writer(), "Discord Client", log.LstdFlags),

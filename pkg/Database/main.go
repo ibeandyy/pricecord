@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	discord "pricecord/pkg/Discord"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -12,12 +13,6 @@ import (
 type Database struct {
 	*sql.DB
 	Logger *log.Logger
-}
-type Guild struct {
-	ID               string
-	ConfiguredTokens []string
-	ChannelID        string
-	MessageID        string
 }
 
 func NewDatabase() *Database {
@@ -43,8 +38,8 @@ func (d *Database) CreateTables() error {
 	return nil
 }
 
-func (d *Database) GetConfig() ([]Guild, error) {
-	var gs []Guild
+func (d *Database) GetConfig() ([]discord.GuildConfiguration, error) {
+	var gs []discord.GuildConfiguration
 	rows, err := d.Query(`SELECT * FROM guilds`)
 	if err != nil {
 		return nil, err
@@ -56,7 +51,7 @@ func (d *Database) GetConfig() ([]Guild, error) {
 		}
 	}()
 	for rows.Next() {
-		var g Guild
+		var g discord.GuildConfiguration
 		err := rows.Scan(&g.ID, &g.ConfiguredTokens, &g.ChannelID, &g.MessageID)
 		if err != nil {
 			return nil, err
@@ -66,16 +61,16 @@ func (d *Database) GetConfig() ([]Guild, error) {
 	return gs, nil
 }
 
-func (d *Database) GetGuild(id string) (Guild, error) {
-	var g Guild
+func (d *Database) GetGuild(id string) (discord.GuildConfiguration, error) {
+	var g discord.GuildConfiguration
 	err := d.QueryRow(`SELECT * FROM guilds WHERE id = ?`, id).Scan(&g.ID, &g.ConfiguredTokens, &g.ChannelID, &g.MessageID)
 	if err != nil {
-		return Guild{}, err
+		return discord.GuildConfiguration{}, err
 	}
 	return g, nil
 }
 
-func (d *Database) AddGuild(g Guild) error {
+func (d *Database) AddGuild(g discord.GuildConfiguration) error {
 	_, err := d.Exec(`INSERT INTO guilds VALUES (?, ?, ?, ?)`, g.ID, g.ConfiguredTokens, g.ChannelID, g.MessageID)
 	if err != nil {
 		return err
@@ -83,7 +78,7 @@ func (d *Database) AddGuild(g Guild) error {
 	return nil
 }
 
-func (d *Database) UpdateGuild(g Guild) error {
+func (d *Database) UpdateGuild(g discord.GuildConfiguration) error {
 	_, err := d.Exec(`UPDATE guilds SET configured_tokens = ?, channel_id = ?, message_id = ? WHERE id = ?`, g.ConfiguredTokens, g.ChannelID, g.MessageID, g.ID)
 	if err != nil {
 		return err
