@@ -1,8 +1,9 @@
 package discord
 
 import (
-	"github.com/bwmarrin/discordgo"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func (a *Application) AddCurrency(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -16,37 +17,43 @@ func (a *Application) AddCurrency(s *discordgo.Session, i *discordgo.Interaction
 		tkn = strings.ToUpper(tkn)
 
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral, Content: "Added new token " + tkn},
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Flags: discordgo.MessageFlagsEphemeral},
 		})
 		if err != nil {
-			a.Logger.Printf("error responding to interaction %v", err)
+			a.LogError("error generating interaction response", err.Error())
 		}
-		a.GuildMapMutex.RLock() // Acquire a read lock
+		a.GuildMapMutex.RLock() // Acquire a write lock
 		guild := a.GuildMap[i.GuildID]
-		a.GuildMapMutex.RUnlock() // Release the read lock
-		a.GuildMapMutex.Lock()    // Acquire a write lock
-		guild.ConfiguredTokens = append(guild.ConfiguredTokens, tkn)
-		a.GuildMapMutex.Unlock() // Release the write lock
+		a.GuildMapMutex.RUnlock() // Release the write lock
+
 		event := Event{
 			Type:     AddCurrency,
-			Data:     guild,
-			Response: make(chan interface{}),
+			Guild:    guild,
+			Symbol:   tkn,
+			Response: make(chan bool),
 		}
+
 		a.Event <- event
 		responseData := <-event.Response
-		//verify currency is valid
-		//verify currency is not already configured
-		//normalize currency
-		//add currency to database
-		//add currency to guild map
-		//add the currency to message
-		//reset guildLastChecked timer
-		//a.GuildMap[i.GuildID].ConfiguredTokens = append(a.GuildMap[i.GuildID].ConfiguredTokens, i.ApplicationCommandData().Options[0].StringValue())
+		close(event.Response)
+		if !responseData {
+			_, err := s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+				Content: "Token " + tkn + " already being tracked or doesn't exist in coingecko API.",
+			})
+			if err != nil {
+				a.LogError("error responding to interaction %v", err.Error())
+				return
+			}
+		}
 
+		_, err = s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+			Content: "Token " + tkn + " added to tracking list.",
+		})
 	}
+
 }
+
 func (a *Application) RemoveCurrency(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:

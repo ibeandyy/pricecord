@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"fmt"
 	"log"
+
 	"pricecord/pkg/Database"
 	"pricecord/pkg/Discord"
 	"pricecord/pkg/HTTP"
@@ -20,11 +22,50 @@ func (c *Controller) ListenToEvents() {
 	for event := range c.DiscordClient.Event {
 		switch event.Type {
 		case discord.AddCurrency:
-			// Fetch data using c.HTTPClient
-			//event.Response <- "fetched data"
+			tkn, gTkns := event.Symbol, event.Guild.ConfiguredTokens
+
+			for _, gTkn := range gTkns {
+				if tkn == gTkn {
+					event.Response <- false
+					continue
+				}
+			}
+
+			res, err := c.HTTPClient.GetTokenPrice(tkn)
+			if err != nil {
+				c.LogError("Error fetching token price", err.Error())
+				event.Response <- false
+				continue
+			}
+			price := fmt.Sprintf("$%.2f", res.Data[tkn].USD)
+
+			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
+			if !ok {
+				c.LogError("guild not found in map")
+				event.Response <- false
+				continue
+			}
+			c.DiscordClient.GuildMapMutex.Lock()
+			guild.ConfiguredTokens = append(guild.ConfiguredTokens, tkn)
+			c.DiscordClient.GuildMap[event.Guild.ID] = guild
+			c.DiscordClient.GuildMapMutex.Unlock()
+
+			err = c.Database.UpdateGuild(guild)
+			if err != nil {
+				c.LogError("Error updating guild", err.Error())
+				event.Response <- false
+				continue
+			}
+			event.Response <- true
+
+			c.DiscordClient.ModifyEmbed(guild, price)
+			c.DiscordClient.ConfigureGuild(guild, tkn)
+
 		case discord.RemoveCurrency:
 			// Save data using c.Database
 			//event.Response <- "save confirmation"
+
+		case discord.Autocomplete:
 		}
 	}
 }
@@ -63,8 +104,6 @@ func (c *Controller) Initialize() {
 		c.DiscordClient.GuildMap[guild.ID] = guild
 	}
 
-	//Load config from database if exists
-	//
 }
 
 func (c *Controller) LogRequest(message ...string) {

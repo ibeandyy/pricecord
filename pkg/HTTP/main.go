@@ -32,6 +32,7 @@ func (c *Client) GetCoins() ([]Coin, error) {
 	c.LogRequest("GetCoins")
 	data, err := c.HTTPClient.Get(c.BaseURL + "/coins/list")
 	if err != nil {
+		c.LogError("Error getting data", err.Error())
 		return nil, err
 	}
 	defer func(Body io.ReadCloser) {
@@ -44,6 +45,7 @@ func (c *Client) GetCoins() ([]Coin, error) {
 	var res []Coin
 	err = json.NewDecoder(data.Body).Decode(&res)
 	if err != nil {
+		c.LogError("Error decoding json", err.Error())
 		return nil, err
 	}
 	return res, nil
@@ -62,6 +64,30 @@ func (c *Client) GetTokenPrices(tokenName []string) (TokenPriceResponse, error) 
 	c.LogRequest("GetTokenPrices")
 	tokens := strings.Join(tokenName, ",")
 	data, err := c.HTTPClient.Get(c.BaseURL + "/simple/price?ids=" + tokens + "&vs_currencies=usd")
+	if err != nil {
+		c.LogError("Error getting data", err.Error())
+		return TokenPriceResponse{}, err
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			c.LogRequest("Error closing body", err.Error())
+		}
+	}(data.Body)
+
+	var res TokenPriceResponse
+	err = json.NewDecoder(data.Body).Decode(&res)
+	if err != nil {
+		c.LogError("Error decoding json", err.Error())
+		return TokenPriceResponse{}, err
+	}
+
+	return res, nil
+}
+
+func (c *Client) GetTokenPrice(tokenName string) (TokenPriceResponse, error) {
+	c.LogRequest("GetTokenPrices")
+	data, err := c.HTTPClient.Get(c.BaseURL + "/simple/price?ids=" + tokenName + "&vs_currencies=usd")
 	if err != nil {
 		return TokenPriceResponse{}, err
 	}
@@ -97,22 +123,29 @@ func (c *Client) GetDeFiData() (DefiDataRes, error) {
 	c.LogRequest("GetDeFiData")
 	data, err := c.HTTPClient.Get(c.BaseURL + "/global/decentralized_finance_defi")
 	if err != nil {
+		c.LogError("Error getting data", err.Error())
 		return DefiDataRes{}, err
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			c.LogRequest("Error closing body", err.Error())
+			c.LogError("Error closing body", err.Error())
 		}
 	}(data.Body)
 	var res DefiDataRes
 	err = json.NewDecoder(data.Body).Decode(&res)
 	if err != nil {
+		c.LogError("Error decoding json", err.Error())
 		return DefiDataRes{}, err
 	}
 	return res, nil
 }
 
 func (c *Client) LogRequest(method ...string) {
-	c.Logger.Printf("%v", method)
+	c.Logger.Printf("[I] v", method)
+}
+
+func (c *Client) LogError(error ...string) {
+	c.Logger.Printf("[E] %v", error)
+
 }

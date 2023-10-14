@@ -2,10 +2,11 @@ package discord
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"log"
 	"os"
 	"sync"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 type Application struct {
@@ -51,12 +52,14 @@ func NewApplication() *Application {
 			},
 		},
 		Logger: log.New(log.Writer(), "Discord Client", log.LstdFlags),
+		Event:  make(chan Event, 5), //TODO: Benchmark this
 	}
 	app.LogRequest("created new application")
 	return app
 }
 
 func (a *Application) AddHandlers() {
+	a.LogRequest("adding handlers")
 	//Slash Command Handler
 	a.Client.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if discordgo.InteractionApplicationCommand != i.Type {
@@ -79,7 +82,7 @@ func (a *Application) AddHandlers() {
 			err := s.ApplicationCommandDelete(a.Client.State.User.ID, e.Guild.ID, a.RegisteredCommands[i].ID)
 
 			if err != nil {
-				fmt.Printf("error deleting command %v", err)
+				a.LogError("error deleting command ", err.Error())
 				os.Exit(1)
 			}
 
@@ -95,40 +98,41 @@ func (a *Application) RegisterCommands(guildID string) []*discordgo.ApplicationC
 
 	cmd, err := a.Client.ApplicationCommandBulkOverwrite(a.Client.State.User.ID, guildID, RawCommands)
 	if err != nil {
-		a.LogError(err)
+		a.LogError("error registering commands ", err.Error())
 		os.Exit(1)
 	}
 	registeredCommands = cmd
 	return registeredCommands
 }
 
-func (a *Application) SendEmbed(guildID, channelID, message string) {
-	a.LogRequest("sending embed for guild", guildID, "in channel", channelID, "with message", message)
+func (a *Application) SendEmbed(gCfg GuildConfiguration) string {
+	a.LogRequest("sending embed for guild", gCfg.ID, "in channel", gCfg.MessageID)
 
-	msg, err := a.Client.ChannelMessageSendEmbed(channelID, &discordgo.MessageEmbed{
-		Title:       "Crypto Bot",
-		Description: message,
+	msg, err := a.Client.ChannelMessageSendEmbed(gCfg.ChannelID, &discordgo.MessageEmbed{
+		Title: "Crypto Bot",
+		//TODO:ADD DEFAULT MESSAGE EMBED
+		Description: "",
 	})
 
 	if err != nil {
-		a.LogError(err)
+		a.LogError("error sending embed ", err.Error())
 		os.Exit(1)
 	}
-	a.ConfigureGuild(guildID, channelID, msg.ID, []string{})
+	return msg.ID
 }
 
-func (a *Application) ModifyEmbed(guildID, channelID, messageID string, payload []*discordgo.MessageEmbedField) {
-	a.LogRequest("modifying embed for guild ", guildID, "in channel ", channelID)
+func (a *Application) ModifyEmbed(g GuildConfiguration, price string) {
+	a.LogRequest("modifying embed for guild ", g.ID, "in channel ", g.ChannelID)
 
-	msg, err := a.Client.ChannelMessageEditEmbed(channelID, messageID, &discordgo.MessageEmbed{
-		Fields: payload,
+	_, err := a.Client.ChannelMessageEditEmbed(g.ChannelID, g.MessageID, &discordgo.MessageEmbed{
+		//TODO:FIX
+		Fields: nil,
 	})
 	if err != nil {
-		a.LogError(err)
+		a.LogError("error editing embed ", err.Error())
 		os.Exit(1)
 	}
 
-	a.ConfigureGuild(guildID, channelID, msg.ID, []string{})
 }
 
 func (a *Application) InitGuildConfig(guildID string) {
@@ -142,21 +146,21 @@ func (a *Application) InitGuildConfig(guildID string) {
 
 }
 
-func (a *Application) ConfigureGuild(guildID, channelID, messageID string, newTokens []string) {
-	a.LogRequest("configuring guild", guildID)
-	cfg, ok := a.GuildMap[guildID]
+func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens ...string) {
+	a.LogRequest("configuring guild", g.ID)
+	cfg, ok := a.GuildMap[g.ID]
 	if !ok {
-		a.InitGuildConfig(guildID)
-		cfg = a.GuildMap[guildID]
+		a.InitGuildConfig(g.ID)
+		cfg = a.GuildMap[g.ID]
 	}
 	if cfg.ChannelID != "" {
-		cfg.ChannelID = channelID
+		cfg.ChannelID = g.ChannelID
 	}
 	if cfg.MessageID != "" {
-		cfg.MessageID = messageID
+		cfg.MessageID = g.MessageID
 	}
 	if len(cfg.ConfiguredTokens) > 0 {
-		cfg.ConfiguredTokens = newTokens
+		cfg.ConfiguredTokens = append(cfg.ConfiguredTokens, newTokens...)
 	}
 }
 
@@ -165,7 +169,7 @@ func (a *Application) removeGuild(guildID string) {
 	delete(a.GuildMap, guildID)
 }
 
-func (a *Application) LogError(error error) {
+func (a *Application) LogError(error ...string) {
 	a.Logger.Printf("[E] %v", error)
 }
 
