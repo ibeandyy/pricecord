@@ -1,9 +1,11 @@
 package discord
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"pricecord/pkg/HTTP"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -21,7 +23,7 @@ type Application struct {
 
 type GuildConfiguration struct {
 	ID               string
-	ConfiguredTokens []string
+	ConfiguredTokens []http.Token
 	ChannelID        string
 	MessageID        string
 }
@@ -44,11 +46,11 @@ func NewApplication() *Application {
 		Client:   Client,
 		GuildMap: make(map[string]GuildConfiguration),
 		HandlerMap: map[string]HandlerFunc{
-			"add-currency": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
-				go a.AddCurrency(s, i)
+			"track-token": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
+				go a.TrackToken(s, i)
 			},
-			"remove-currency": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
-				go a.RemoveCurrency(s, i)
+			"remove-token": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
+				go a.RemoveToken(s, i)
 			},
 		},
 		Logger: log.New(log.Writer(), "Discord Client", log.LstdFlags),
@@ -58,21 +60,26 @@ func NewApplication() *Application {
 	return app
 }
 
-func (a *Application) AddHandlers() {
+func (a *Application) AddHandlers() error {
 	a.LogRequest("adding handlers")
 	//Slash Command Handler
 	a.Client.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if discordgo.InteractionApplicationCommand != i.Type {
+		if i.Type != discordgo.InteractionApplicationCommand {
 			return
 		}
 		if handler, ok := a.HandlerMap[i.ApplicationCommandData().Name]; ok {
 			handler(a, a.Client, i)
+			return
 		}
+		return
 	})
 	//Guild Join Handler
 	a.Client.AddHandler(func(s *discordgo.Session, i *discordgo.GuildCreate) {
 
-		a.RegisterCommands(i.Guild.ID)
+		err := a.RegisterCommands(i.Guild.ID)
+		if err != nil {
+			return
+		}
 		a.InitGuildConfig(i.Guild.ID)
 	})
 	//Guild Leave Handler
@@ -89,64 +96,99 @@ func (a *Application) AddHandlers() {
 		}
 		a.removeGuild(e.Guild.ID)
 	})
-
+	return nil
 }
 
-func (a *Application) RegisterCommands(guildID string) []*discordgo.ApplicationCommand {
+func (a *Application) RegisterCommands(guildID string) error {
 	a.LogRequest("registering commands for guild", guildID)
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(RawCommands))
 
 	cmd, err := a.Client.ApplicationCommandBulkOverwrite(a.Client.State.User.ID, guildID, RawCommands)
 	if err != nil {
-		a.LogError("error registering commands ", err.Error())
-		os.Exit(1)
+		return err
 	}
-	registeredCommands = cmd
-	return registeredCommands
+	a.RegisteredCommands = cmd
+	return nil
 }
 
-func (a *Application) SendEmbed(gCfg GuildConfiguration) string {
+func (a *Application) SendEmbed(gCfg GuildConfiguration) error {
 	a.LogRequest("sending embed for guild", gCfg.ID, "in channel", gCfg.MessageID)
 
-	msg, err := a.Client.ChannelMessageSendEmbed(gCfg.ChannelID, &discordgo.MessageEmbed{
+	_, err := a.Client.ChannelMessageSendEmbed(gCfg.ChannelID, &discordgo.MessageEmbed{
 		Title: "Crypto Bot",
 		//TODO:ADD DEFAULT MESSAGE EMBED
 		Description: "",
 	})
 
 	if err != nil {
-		a.LogError("error sending embed ", err.Error())
-		os.Exit(1)
+		return err
 	}
-	return msg.ID
+	return nil
 }
 
-func (a *Application) ModifyEmbed(g GuildConfiguration, price string) {
+// ModifyField updates the fields of the embed
+// If the token is not found, a new field is added
+// If the provided price string is empty, the field is removed
+func (a *Application) ModifyField(g GuildConfiguration, tkn, price string) error {
 	a.LogRequest("modifying embed for guild ", g.ID, "in channel ", g.ChannelID)
 
-	_, err := a.Client.ChannelMessageEditEmbed(g.ChannelID, g.MessageID, &discordgo.MessageEmbed{
-		//TODO:FIX
-		Fields: nil,
-	})
+	msg, err := a.Client.ChannelMessage(g.ChannelID, g.MessageID)
 	if err != nil {
-		a.LogError("error editing embed ", err.Error())
-		os.Exit(1)
+		return err
 	}
 
+	if len(msg.Embeds) == 0 {
+		return errors.New("no embeds in the message")
+	}
+
+EmbLoop:
+	for eIdx := range msg.Embeds {
+		emb := msg.Embeds[eIdx] // Get the embed using index
+
+		// Find the field with the token name
+		// If none found, add a new field to the first embed with <= 24 fields
+		// If no embeds have <= 24 fields, add a new embed
+		for i, field := range emb.Fields {
+			if field.Name == tkn {
+				if price == "" {
+					emb.Fields = append(emb.Fields[:i], emb.Fields[i+1:]...)
+					break EmbLoop
+				} else {
+					emb.Fields[i].Value = price
+					break EmbLoop
+				}
+
+			}
+		}
+		if len(emb.Fields) <= 24 {
+			emb.Fields = append(emb.Fields, &discordgo.MessageEmbedField{
+				Name:   tkn,
+				Value:  price,
+				Inline: true,
+			})
+			break EmbLoop
+		}
+	}
+
+	_, err = a.Client.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		ID:      msg.ID,
+		Channel: msg.ChannelID,
+		Embeds:  msg.Embeds,
+	})
+	return err
 }
 
 func (a *Application) InitGuildConfig(guildID string) {
 	a.LogRequest("populating guild", guildID)
 	a.GuildMap[guildID] = GuildConfiguration{
 		ID:               guildID,
-		ConfiguredTokens: []string{},
+		ConfiguredTokens: []http.Token{},
 		ChannelID:        "",
 		MessageID:        "",
 	}
 
 }
 
-func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens ...string) {
+func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens ...http.Token) {
 	a.LogRequest("configuring guild", g.ID)
 	cfg, ok := a.GuildMap[g.ID]
 	if !ok {
@@ -176,11 +218,3 @@ func (a *Application) LogError(error ...string) {
 func (a *Application) LogRequest(method ...string) {
 	a.Logger.Printf("[I] %v", method)
 }
-
-//SEND EMBED
-
-//MODIFY EMBED
-
-//CURRENCY-IN-FIELD-CHECK
-
-//
