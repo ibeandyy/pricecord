@@ -32,7 +32,7 @@ var RawCommands = []*discordgo.ApplicationCommand{{
 		},
 	},
 	{
-		Name:        "add-other",
+		Name:        "track-other",
 		Description: "Add other statical data to the list",
 		Options: []*discordgo.ApplicationCommandOption{
 			{

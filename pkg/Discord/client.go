@@ -52,6 +52,12 @@ func NewApplication() *Application {
 			"remove-token": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
 				go a.RemoveToken(s, i)
 			},
+			"track-other": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
+				go a.TrackOther(s, i)
+			},
+			"remove-other": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
+				go a.RemoveOther(s, i)
+			},
 		},
 		Logger: log.New(log.Writer(), "Discord Client", log.LstdFlags),
 		Event:  make(chan Event, 5), //TODO: Benchmark this

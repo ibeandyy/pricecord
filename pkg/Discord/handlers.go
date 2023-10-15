@@ -30,16 +30,6 @@ func (a *Application) TrackToken(s *discordgo.Session, i *discordgo.InteractionC
 		close(event.ACResponse)
 		close(event.Response)
 
-		if !responseData {
-			//_, err := s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
-			//	Content: "Token " + tkn + " already being tracked or doesn't exist in coingecko API.",
-			//})
-			//if err != nil {
-			//	a.LogError("error responding to interaction %v", err.Error())
-			//	return
-			//}
-		}
-
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionApplicationCommandAutocompleteResult,
 			Data: &discordgo.InteractionResponseData{
@@ -106,3 +96,9 @@ func (a *Application) RemoveToken(s *discordgo.Session, i *discordgo.Interaction
 		//return list of currencies
 	}
 }
+
+func (a *Application) TrackOther(s *discordgo.Session, i *discordgo.InteractionCreate) {
+
+}
+
+func (a *Application) RemoveOther(s *discordgo.Session, i *discordgo.InteractionCreate) {}
