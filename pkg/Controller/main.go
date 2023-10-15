@@ -2,9 +2,11 @@ package controller
 
 import (
 	"fmt"
+	"github.com/bwmarrin/discordgo"
 	"log"
 	"pricecord/pkg/Database"
 	"pricecord/pkg/Discord"
+	utils "pricecord/pkg/Discord/Utils"
 	"pricecord/pkg/HTTP"
 	"strings"
 )
@@ -195,10 +197,34 @@ func (c *Controller) HandleACRemoveCurr(e discord.Event) {
 }
 
 func (c *Controller) HandleACAddOther(e discord.Event) {
-
+	var matches []*discordgo.ApplicationCommandOptionChoice
+	userInput := e.ACValue
+	userInputLower := strings.ToLower(userInput)
+	for _, choice := range utils.DefaultOtherChoices {
+		if strings.Contains(strings.ToLower(choice.Name), userInputLower) {
+			matches = append(matches, choice)
+		}
+	}
+	e.ACResponse <- matches
+	e.Response <- true
 }
 
-func (c *Controller) HandleACRemoveOther(e discord.Event) {}
+func (c *Controller) HandleACRemoveOther(e discord.Event) {
+	var matches []*discordgo.ApplicationCommandOptionChoice
+	userInput := e.ACValue
+	userInputLower := strings.ToLower(userInput)
+	for _, choice := range e.Guild.ConfiguredOthers {
+		if strings.Contains(strings.ToLower(choice.Name), userInputLower) {
+			newChoice := &discordgo.ApplicationCommandOptionChoice{
+				Name:  choice.Name,
+				Value: choice.Value,
+			}
+			matches = append(matches, newChoice)
+		}
+	}
+	e.ACResponse <- matches
+	e.Response <- true
+}
 
 func (c *Controller) routeAutoComplete(e discord.Event) {
 	switch e.ACType {

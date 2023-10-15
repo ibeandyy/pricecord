@@ -21,9 +21,15 @@ type Application struct {
 	Event              chan Event
 }
 
+type OtherStat struct {
+	Name  string
+	Value string
+}
+
 type GuildConfiguration struct {
 	ID               string
 	ConfiguredTokens []http.Token
+	ConfiguredOthers []OtherStat
 	ChannelID        string
 	MessageID        string
 }
