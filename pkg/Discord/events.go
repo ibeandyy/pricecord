@@ -8,21 +8,24 @@ const (
 	TrackToken EventType = iota
 	RemoveToken
 	Autocomplete
+	TrackOther
+	RemoveOther
 )
 
 type AutocompleteType int
 
 const (
 	AddCurr AutocompleteType = iota
-	RemoveCurr
+	RemCurr
 	AddOther
-	RemoveOther
+	RemOther
 )
 
 type Event struct {
 	Type       EventType
 	Guild      GuildConfiguration
 	Symbol     string
+	Stat       string
 	ACType     AutocompleteType
 	ACValue    string
 	ACResponse chan []*discordgo.ApplicationCommandOptionChoice

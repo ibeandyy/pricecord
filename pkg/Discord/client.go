@@ -7,6 +7,7 @@ import (
 	"os"
 	"pricecord/pkg/HTTP"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -32,6 +33,7 @@ type GuildConfiguration struct {
 	ConfiguredOthers []OtherStat
 	ChannelID        string
 	MessageID        string
+	LastChecked      time.Time
 }
 type HandlerFunc func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate)
 
@@ -196,6 +198,7 @@ func (a *Application) InitGuildConfig(guildID string) {
 		ConfiguredTokens: []http.Token{},
 		ChannelID:        "",
 		MessageID:        "",
+		LastChecked:      time.Now(),
 	}
 
 }

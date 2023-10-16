@@ -6,7 +6,7 @@ import (
 	"log"
 	"pricecord/pkg/Database"
 	"pricecord/pkg/Discord"
-	utils "pricecord/pkg/Discord/Utils"
+	"pricecord/pkg/Discord/Utils"
 	"pricecord/pkg/HTTP"
 	"strings"
 )
@@ -153,9 +153,11 @@ func (c *Controller) ListenToEvents() {
 			event.Response <- true
 
 		case discord.Autocomplete:
+
 			//TODO: VERIFY GOROUTINE NECESSITY
 			go c.routeAutoComplete(event)
-
+		case discord.TrackOther:
+		case discord.RemoveOther:
 		}
 	}
 }
@@ -230,11 +232,11 @@ func (c *Controller) routeAutoComplete(e discord.Event) {
 	switch e.ACType {
 	case discord.AddCurr:
 		go c.HandleACAddCurr(e)
-	case discord.RemoveCurr:
+	case discord.RemCurr:
 		go c.HandleACRemoveCurr(e)
 	case discord.AddOther:
 		go c.HandleACAddOther(e)
-	case discord.RemoveOther:
+	case discord.RemOther:
 		go c.HandleACRemoveOther(e)
 
 	default:
