@@ -2,9 +2,11 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
@@ -148,4 +150,18 @@ func (c *Client) LogRequest(method ...string) {
 func (c *Client) LogError(error ...string) {
 	c.Logger.Printf("[E] %v", error)
 
+}
+
+func (c *Client) GetDefiOther(key string) (string, string) {
+	data, err := c.GetDeFiData()
+	if err != nil {
+		c.LogError("Error getting defi data", err.Error())
+		return "", ""
+	}
+	r := reflect.ValueOf(data)
+	field := reflect.Indirect(r).FieldByName(key)
+	if field.IsValid() {
+		return key, fmt.Sprintf("%v", field.Interface())
+	}
+	return "", ""
 }

@@ -21,9 +21,9 @@ type Controller struct {
 }
 
 // NewController returns a new controller
-func NewController() *Controller {
+func NewController(token string) *Controller {
 	return &Controller{
-		DiscordClient: discord.NewApplication(),
+		DiscordClient: discord.NewApplication(token),
 		Database:      database.NewDatabase(),
 		HTTPClient:    http.NewClient(),
 		Logger:        log.New(log.Writer(), "Controller", log.LstdFlags),
@@ -32,17 +32,12 @@ func NewController() *Controller {
 }
 
 func (c *Controller) Initialize() {
-	err := c.DiscordClient.AddHandlers()
-	if err != nil {
-		c.LogError("Error adding handlers", err.Error())
-		return
-	}
-	err = c.Database.CreateTables()
+
+	err := c.Database.CreateTables()
 	if err != nil {
 		c.LogError("Error creating tables", err.Error())
 		return
 	}
-	c.ListenToEvents()
 	tokens, err := c.HTTPClient.GetTokens()
 	if err != nil {
 		c.LogError("Error fetching tokens", err.Error())
@@ -59,11 +54,18 @@ func (c *Controller) Initialize() {
 	for _, guild := range guilds {
 		c.DiscordClient.GuildMap[guild.ID] = guild
 	}
-
+	c.LogRequest("Initialized, listening for events")
+	err = c.DiscordClient.AddHandlers()
+	if err != nil {
+		c.LogError("Error adding handlers", err.Error())
+		return
+	}
+	c.ListenToEvents()
 }
 
 func (c *Controller) ListenToEvents() {
 	for event := range c.DiscordClient.Event {
+		fmt.Println("testing")
 		switch event.Type {
 		case discord.TrackToken:
 			tkn, gTkns := event.Symbol, event.Guild.ConfiguredTokens
@@ -105,9 +107,7 @@ func (c *Controller) ListenToEvents() {
 				continue
 			}
 			c.DiscordClient.GuildMapMutex.Lock()
-			c.DiscordClient.ConfigureGuild(guild, newTrackToken)
-			guild.ConfiguredTokens = append(guild.ConfiguredTokens, newTrackToken)
-			c.DiscordClient.GuildMap[event.Guild.ID] = guild
+			c.DiscordClient.ConfigureGuild(guild, []http.Token{newTrackToken}, make([]discord.OtherStat, 0), false)
 			c.DiscordClient.GuildMapMutex.Unlock()
 
 			err = c.DiscordClient.ModifyField(guild, tkn, price)
@@ -130,9 +130,7 @@ func (c *Controller) ListenToEvents() {
 				if tkn == gTkn.Symbol {
 
 					c.DiscordClient.GuildMapMutex.Lock()
-					c.DiscordClient.ConfigureGuild(guild, gTkn)
-					guild.ConfiguredTokens = append(guild.ConfiguredTokens, gTkn)
-					c.DiscordClient.GuildMap[event.Guild.ID] = guild
+					c.DiscordClient.ConfigureGuild(guild, []http.Token{gTkn}, make([]discord.OtherStat, 0), true)
 					c.DiscordClient.GuildMapMutex.Unlock()
 				}
 			}
@@ -153,19 +151,109 @@ func (c *Controller) ListenToEvents() {
 			event.Response <- true
 
 		case discord.Autocomplete:
-
-			//TODO: VERIFY GOROUTINE NECESSITY
-			go c.routeAutoComplete(event)
+			c.routeAutoComplete(event)
 		case discord.TrackOther:
+			newStat := event.Stat
+			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
+			if !ok {
+				c.LogError("guild not found in map")
+				event.Response <- false
+				continue
+			}
+
+			for _, stat := range guild.ConfiguredOthers {
+
+				if stat.Name == newStat {
+					c.DiscordClient.GuildMapMutex.Lock()
+					c.DiscordClient.ConfigureGuild(guild, make([]http.Token, 0), []discord.OtherStat{stat}, false)
+					c.DiscordClient.GuildMapMutex.Unlock()
+				}
+			}
+			fieldName, fieldValue := c.HTTPClient.GetDefiOther(newStat)
+			if fieldName == "" {
+				c.LogError("Stat not found in defi other")
+				event.Response <- false
+				continue
+			}
+			err := c.Database.UpdateGuild(guild)
+			if err != nil {
+				c.LogError("Error updating guild", err.Error())
+				event.Response <- false
+				continue
+			}
+
+			err = c.DiscordClient.ModifyField(guild, fieldName, fieldValue)
+			if err != nil {
+				c.LogError("Error modifying embed", err.Error())
+				event.Response <- false
+				continue
+			}
+			event.Response <- true
+
 		case discord.RemoveOther:
+			newStat := event.Stat
+			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
+			if !ok {
+				c.LogError("guild not found in map")
+				event.Response <- false
+				continue
+			}
+
+			for _, stat := range guild.ConfiguredOthers {
+
+				if stat.Name == newStat {
+					c.DiscordClient.GuildMapMutex.Lock()
+					c.DiscordClient.ConfigureGuild(guild, make([]http.Token, 0), []discord.OtherStat{stat}, true)
+					c.DiscordClient.GuildMapMutex.Unlock()
+				}
+			}
+
+			err := c.Database.UpdateGuild(guild)
+			if err != nil {
+				c.LogError("Error updating guild", err.Error())
+				event.Response <- false
+				continue
+			}
+
+			err = c.DiscordClient.ModifyField(guild, newStat, "")
+			if err != nil {
+				c.LogError("Error modifying embed", err.Error())
+				event.Response <- false
+				continue
+			}
+			event.Response <- true
+		case discord.InitGuild:
+			err := c.Database.AddGuild(event.Guild)
+			if err != nil {
+				c.LogError("Error adding guild", err.Error())
+				event.Response <- false
+				continue
+			}
+			event.Response <- true
+
+		case discord.DeleteGuild:
+			err := c.Database.RemoveGuild(event.Guild.ID)
+			if err != nil {
+				c.LogError("Error deleting guild", err.Error())
+				event.Response <- false
+				continue
+			}
+			event.Response <- true
+
 		}
 	}
 }
 
 func (c *Controller) HandleACAddCurr(e discord.Event) {
-	//TODO: IF USER INPUT IS EMPTY, RETURN ALL CONFIGURED TOKENS
 	var matches []http.Token
 	userInput := e.ACValue
+	fmt.Println("USER INPUT IS ", userInput)
+	if userInput == "" {
+		//TODO: FIX, REUTURNING NO AUTOCOMPLETE.
+		e.ACResponse <- ConvertTokenToChoice(e.Guild.ConfiguredTokens)
+		e.Response <- true
+		return
+	}
 	userInputLower := strings.ToLower(userInput)
 	var defaultTokens []http.Token
 	for _, token := range c.TokenCache {
@@ -182,9 +270,13 @@ func (c *Controller) HandleACAddCurr(e discord.Event) {
 }
 
 func (c *Controller) HandleACRemoveCurr(e discord.Event) {
-	//TODO: IF USER INPUT IS EMPTY, RETURN ALL CONFIGURED TOKENS
 	var matches []http.Token
 	userInput := e.ACValue
+	if userInput == "" {
+		e.ACResponse <- ConvertTokenToChoice(e.Guild.ConfiguredTokens)
+		e.Response <- true
+		return
+	}
 	userInputLower := strings.ToLower(userInput)
 	for _, token := range e.Guild.ConfiguredTokens {
 		if strings.Contains(strings.ToLower(token.ID), userInputLower) ||
@@ -228,16 +320,23 @@ func (c *Controller) HandleACRemoveOther(e discord.Event) {
 	e.Response <- true
 }
 
+func (c *Controller) Close() {
+	err := c.DiscordClient.Close()
+	if err != nil {
+		c.LogError("error closing client", err.Error())
+	}
+}
+
 func (c *Controller) routeAutoComplete(e discord.Event) {
 	switch e.ACType {
 	case discord.AddCurr:
-		go c.HandleACAddCurr(e)
+		c.HandleACAddCurr(e)
 	case discord.RemCurr:
-		go c.HandleACRemoveCurr(e)
+		c.HandleACRemoveCurr(e)
 	case discord.AddOther:
-		go c.HandleACAddOther(e)
+		c.HandleACAddOther(e)
 	case discord.RemOther:
-		go c.HandleACRemoveOther(e)
+		c.HandleACRemoveOther(e)
 
 	default:
 		c.LogError("how did I get here ")

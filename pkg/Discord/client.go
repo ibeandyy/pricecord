@@ -37,19 +37,26 @@ type GuildConfiguration struct {
 }
 type HandlerFunc func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate)
 
-func NewApplication() *Application {
-	tkn := os.Getenv("TOKEN")
+var DefaultEmbed = &discordgo.MessageEmbed{
+	Title:       "Pricecord",
+	Color:       0x82ff80,
+	Timestamp:   time.Now().Format(time.RFC3339),
+	Description: "Use the /track-* commands to add something for me to track!",
+}
 
-	if tkn == "" {
-		fmt.Printf("unable to fetch Discord token %v", tkn)
-	}
+func NewApplication(token string) *Application {
 
-	Client, err := discordgo.New(tkn)
+	Client, err := discordgo.New("Bot " + token)
 
 	if err != nil {
 		fmt.Printf("error connecting client %v", err)
+		os.Exit(1)
 	}
-
+	err = Client.Open()
+	if err != nil {
+		fmt.Printf("error opening connection %v", err)
+		os.Exit(1)
+	}
 	app := &Application{
 		Client:   Client,
 		GuildMap: make(map[string]GuildConfiguration),
@@ -78,26 +85,35 @@ func (a *Application) AddHandlers() error {
 	a.LogRequest("adding handlers")
 	//Slash Command Handler
 	a.Client.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if i.Type != discordgo.InteractionApplicationCommand {
-			return
-		}
+		a.LogRequest("Received interaction", i.Type.String())
+		//if i.Type != discordgo.InteractionApplicationCommand {
+		//	return
+		//}
 		if handler, ok := a.HandlerMap[i.ApplicationCommandData().Name]; ok {
 			handler(a, a.Client, i)
-			return
+
 		}
-		return
+
 	})
 	//Guild Join Handler
 	a.Client.AddHandler(func(s *discordgo.Session, i *discordgo.GuildCreate) {
+		a.LogRequest("Received GuildJoin Event")
 
 		err := a.RegisterCommands(i.Guild.ID)
 		if err != nil {
+			a.LogError("error registering commands", err.Error())
 			return
 		}
-		a.InitGuildConfig(i.Guild.ID)
+		err = a.InitGuildConfig(i.Guild.ID)
+		if err != nil {
+			a.LogError("error initializing guild", err.Error())
+			return
+		}
 	})
 	//Guild Leave Handler
 	a.Client.AddHandler(func(s *discordgo.Session, e *discordgo.GuildDelete) {
+		a.LogRequest("Received GuildDelete Event")
+
 		for i := range a.RegisteredCommands {
 
 			err := s.ApplicationCommandDelete(a.Client.State.User.ID, e.Guild.ID, a.RegisteredCommands[i].ID)
@@ -116,24 +132,24 @@ func (a *Application) AddHandlers() error {
 func (a *Application) RegisterCommands(guildID string) error {
 	a.LogRequest("registering commands for guild", guildID)
 
-	cmd, err := a.Client.ApplicationCommandBulkOverwrite(a.Client.State.User.ID, guildID, RawCommands)
-	if err != nil {
-		return err
+	for _, cmd := range RawCommands {
+		_, err := a.Client.ApplicationCommandCreate(a.Client.State.User.ID, guildID, cmd)
+		if err != nil {
+			return err
+		}
 	}
-	a.RegisteredCommands = cmd
+
+	a.RegisteredCommands = RawCommands
 	return nil
 }
 
 func (a *Application) SendEmbed(gCfg GuildConfiguration) error {
 	a.LogRequest("sending embed for guild", gCfg.ID, "in channel", gCfg.MessageID)
 
-	_, err := a.Client.ChannelMessageSendEmbed(gCfg.ChannelID, &discordgo.MessageEmbed{
-		Title: "Crypto Bot",
-		//TODO:ADD DEFAULT MESSAGE EMBED
-		Description: "",
-	})
+	_, err := a.Client.ChannelMessageSendEmbed(gCfg.ChannelID, DefaultEmbed)
 
 	if err != nil {
+		a.LogError("error sending embed", err.Error())
 		return err
 	}
 	return nil
@@ -142,7 +158,7 @@ func (a *Application) SendEmbed(gCfg GuildConfiguration) error {
 // ModifyField updates the fields of the embed
 // If the token is not found, a new field is added
 // If the provided price string is empty, the field is removed
-func (a *Application) ModifyField(g GuildConfiguration, tkn, price string) error {
+func (a *Application) ModifyField(g GuildConfiguration, name, value string) error {
 	a.LogRequest("modifying embed for guild ", g.ID, "in channel ", g.ChannelID)
 
 	msg, err := a.Client.ChannelMessage(g.ChannelID, g.MessageID)
@@ -162,12 +178,12 @@ EmbLoop:
 		// If none found, add a new field to the first embed with <= 24 fields
 		// If no embeds have <= 24 fields, add a new embed
 		for i, field := range emb.Fields {
-			if field.Name == tkn {
-				if price == "" {
+			if field.Name == name {
+				if value == "" {
 					emb.Fields = append(emb.Fields[:i], emb.Fields[i+1:]...)
 					break EmbLoop
 				} else {
-					emb.Fields[i].Value = price
+					emb.Fields[i].Value = value
 					break EmbLoop
 				}
 
@@ -175,8 +191,8 @@ EmbLoop:
 		}
 		if len(emb.Fields) <= 24 {
 			emb.Fields = append(emb.Fields, &discordgo.MessageEmbedField{
-				Name:   tkn,
-				Value:  price,
+				Name:   name,
+				Value:  value,
 				Inline: true,
 			})
 			break EmbLoop
@@ -187,27 +203,54 @@ EmbLoop:
 		ID:      msg.ID,
 		Channel: msg.ChannelID,
 		Embeds:  msg.Embeds,
+		Content: nil,
 	})
 	return err
 }
 
-func (a *Application) InitGuildConfig(guildID string) {
+func (a *Application) InitGuildConfig(guildID string) error {
 	a.LogRequest("populating guild", guildID)
+	ch, err := a.Client.GuildChannelCreate(guildID, "Pricecord", discordgo.ChannelTypeGuildText)
+	if err != nil {
+		return err
+	}
+	msg, err := a.Client.ChannelMessageSendEmbed(ch.ID, DefaultEmbed)
+	if err != nil {
+		return err
+	}
+
 	a.GuildMap[guildID] = GuildConfiguration{
 		ID:               guildID,
 		ConfiguredTokens: []http.Token{},
-		ChannelID:        "",
-		MessageID:        "",
+		ConfiguredOthers: []OtherStat{},
+		ChannelID:        ch.ID,
+		MessageID:        msg.ID,
 		LastChecked:      time.Now(),
 	}
+	event := Event{
+		Type:     InitGuild,
+		Guild:    a.GuildMap[guildID],
+		Response: make(chan bool),
+	}
+	a.Event <- event
+	ok := <-event.Response
+	if !ok {
+		a.LogError("error saving guild to DB")
+	}
+	return err
 
 }
 
-func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens ...http.Token) {
+func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens []http.Token, newOther []OtherStat, delete bool) {
 	a.LogRequest("configuring guild", g.ID)
+	a.GuildMapMutex.Lock()
 	cfg, ok := a.GuildMap[g.ID]
 	if !ok {
-		a.InitGuildConfig(g.ID)
+		err := a.InitGuildConfig(g.ID)
+		if err != nil {
+			a.LogError("error initializing guild", err.Error())
+			return
+		}
 		cfg = a.GuildMap[g.ID]
 	}
 	if cfg.ChannelID != "" {
@@ -215,15 +258,58 @@ func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens ...http.Tok
 	}
 	if cfg.MessageID != "" {
 		cfg.MessageID = g.MessageID
+
 	}
 	if len(cfg.ConfiguredTokens) > 0 {
-		cfg.ConfiguredTokens = append(cfg.ConfiguredTokens, newTokens...)
+		if delete {
+			for i, tkn := range cfg.ConfiguredTokens {
+				for _, newTkn := range newTokens {
+					if tkn.ID == newTkn.ID {
+						cfg.ConfiguredTokens = append(cfg.ConfiguredTokens[:i], cfg.ConfiguredTokens[i+1:]...)
+					}
+				}
+			}
+		} else {
+			cfg.ConfiguredTokens = append(cfg.ConfiguredTokens, newTokens...)
+		}
 	}
+	if len(cfg.ConfiguredOthers) > 0 {
+		if delete {
+			for i, stat := range cfg.ConfiguredOthers {
+				for _, newStat := range newOther {
+					if stat.Name == newStat.Name {
+						cfg.ConfiguredOthers = append(cfg.ConfiguredOthers[:i], cfg.ConfiguredOthers[i+1:]...)
+					}
+				}
+			}
+		} else {
+			cfg.ConfiguredOthers = append(cfg.ConfiguredOthers, newOther...)
+		}
+	}
+	a.GuildMap[g.ID] = cfg
+	a.GuildMapMutex.Unlock()
+
+}
+
+func (a *Application) Close() error {
+	a.LogRequest("closing application")
+	err := a.Client.Close()
+	return err
 }
 
 func (a *Application) removeGuild(guildID string) {
 	a.LogRequest("removing guild", guildID)
-	delete(a.GuildMap, guildID)
+	event := Event{
+		Type:     DeleteGuild,
+		Guild:    a.GuildMap[guildID],
+		Response: make(chan bool),
+	}
+	ok := <-event.Response
+	if ok {
+		delete(a.GuildMap, guildID)
+	} else {
+		a.LogError("error deleting guild from DB")
+	}
 }
 
 func (a *Application) LogError(error ...string) {

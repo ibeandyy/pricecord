@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/bwmarrin/discordgo"
+	discord "pricecord/pkg/Discord"
 	http "pricecord/pkg/HTTP"
 )
 
@@ -24,4 +25,12 @@ func DefaultTokenCheck(list []*discordgo.ApplicationCommandOptionChoice, default
 		return ConvertTokenToChoice(defaultTokens)
 	}
 
+}
+
+func OutputConfiguredTokens(input string, g discord.GuildConfiguration) []http.Token {
+	if input == "" {
+		return g.ConfiguredTokens
+	}
+
+	return nil
 }

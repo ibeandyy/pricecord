@@ -10,7 +10,7 @@ func (a *Application) TrackToken(s *discordgo.Session, i *discordgo.InteractionC
 	switch i.Type {
 
 	case discordgo.InteractionApplicationCommandAutocomplete:
-		a.handleAutoComplete(s, i, AddCurr)
+		go a.handleAutoComplete(s, i, AddCurr)
 
 	case discordgo.InteractionApplicationCommand:
 		tkn := i.ApplicationCommandData().Options[0].StringValue()
