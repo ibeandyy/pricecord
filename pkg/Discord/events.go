@@ -10,6 +10,8 @@ const (
 	Autocomplete
 	TrackOther
 	RemoveOther
+	InitGuild
+	DeleteGuild
 )
 
 type AutocompleteType int
