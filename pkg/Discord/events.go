@@ -26,7 +26,7 @@ const (
 type Event struct {
 	Type       EventType
 	Guild      GuildConfiguration
-	Symbol     string
+	Name       string
 	Stat       string
 	ACType     AutocompleteType
 	ACValue    string

@@ -74,8 +74,8 @@ func NewApplication(token string) *Application {
 				go a.RemoveOther(s, i)
 			},
 		},
-		Logger: log.New(log.Writer(), "Discord Client", log.LstdFlags),
-		Event:  make(chan Event, 5), //TODO: Benchmark this
+		Logger: log.New(log.Writer(), "Discord Client ", log.LstdFlags),
+		Event:  make(chan Event, 5),
 	}
 	app.LogRequest("created new application")
 	return app
@@ -210,6 +210,9 @@ EmbLoop:
 
 func (a *Application) InitGuildConfig(guildID string) error {
 	a.LogRequest("populating guild", guildID)
+	if _, ok := a.GuildMap[guildID]; ok {
+		return errors.New("guild already initialized")
+	}
 	ch, err := a.Client.GuildChannelCreate(guildID, "Pricecord", discordgo.ChannelTypeGuildText)
 	if err != nil {
 		return err
@@ -243,7 +246,6 @@ func (a *Application) InitGuildConfig(guildID string) error {
 
 func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens []http.Token, newOther []OtherStat, delete bool) {
 	a.LogRequest("configuring guild", g.ID)
-	a.GuildMapMutex.Lock()
 	cfg, ok := a.GuildMap[g.ID]
 	if !ok {
 		err := a.InitGuildConfig(g.ID)
@@ -287,7 +289,6 @@ func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens []http.Toke
 		}
 	}
 	a.GuildMap[g.ID] = cfg
-	a.GuildMapMutex.Unlock()
 
 }
 

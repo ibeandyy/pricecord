@@ -6,23 +6,29 @@ import (
 	http "pricecord/pkg/HTTP"
 )
 
-func ConvertTokenToChoice(token []http.Token) []*discordgo.ApplicationCommandOptionChoice {
+func (c *Controller) ConvertTokenToChoice(token []http.Token) []*discordgo.ApplicationCommandOptionChoice {
 	var choices []*discordgo.ApplicationCommandOptionChoice
+	if len(token) == 0 {
+		token = c.DefaultTokens
+	}
 	for _, t := range token {
 		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
 			Name:  t.Name,
 			Value: t.ID,
 		})
+		if len(choices) == 25 {
+			break
+		}
 	}
 	return choices
 
 }
 
-func DefaultTokenCheck(list []*discordgo.ApplicationCommandOptionChoice, defaultTokens []http.Token) []*discordgo.ApplicationCommandOptionChoice {
-	if len(list) > 0 {
+func (c *Controller) DefaultTokenCheck(list []*discordgo.ApplicationCommandOptionChoice, defaultTokens []http.Token) []*discordgo.ApplicationCommandOptionChoice {
+	if len(list) > 0 && len(list) <= 25 {
 		return list
 	} else {
-		return ConvertTokenToChoice(defaultTokens)
+		return c.ConvertTokenToChoice(defaultTokens)
 	}
 
 }

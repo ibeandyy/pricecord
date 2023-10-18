@@ -20,7 +20,7 @@ func NewClient() *Client {
 	return &Client{
 		BaseURL:    "https://api.coingecko.com/api/v3",
 		HTTPClient: &http.Client{},
-		Logger:     log.New(log.Writer(), "HTTP Client", log.LstdFlags),
+		Logger:     log.New(log.Writer(), "HTTP Client ", log.LstdFlags),
 	}
 }
 
@@ -53,57 +53,53 @@ func (c *Client) GetTokens() ([]Token, error) {
 	return res, nil
 }
 
-type TokenPriceResponse struct {
-	Data map[string]USDValue `json:"-"`
-}
-
-type USDValue struct {
-	USD float64 `json:"usd"`
-}
+//type Response struct {
+//	Data map[string]CurrencyInfo `json:"-"`
+//}
+//
+//type CurrencyInfo struct {
+//	USD float64 `json:"usd"`
+//}
 
 // GetTokenPrices takes in a slice of token names and returns the price of the tokens in USD
-func (c *Client) GetTokenPrices(tokenName []string) (TokenPriceResponse, error) {
+func (c *Client) GetTokenPrices(tokenName []string) (Response, error) {
 	c.LogRequest("GetTokenPrices")
 	tokens := strings.Join(tokenName, ",")
 	data, err := c.HTTPClient.Get(c.BaseURL + "/simple/price?ids=" + tokens + "&vs_currencies=usd")
 	if err != nil {
 		c.LogError("Error getting data", err.Error())
-		return TokenPriceResponse{}, err
+		return Response{}, err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			c.LogRequest("Error closing body", err.Error())
-		}
-	}(data.Body)
+	defer data.Body.Close()
 
-	var res TokenPriceResponse
+	var res Response
 	err = json.NewDecoder(data.Body).Decode(&res)
 	if err != nil {
 		c.LogError("Error decoding json", err.Error())
-		return TokenPriceResponse{}, err
+		return Response{}, err
 	}
 
 	return res, nil
 }
 
-func (c *Client) GetTokenPrice(tokenName string) (TokenPriceResponse, error) {
+type TokenPrice struct {
+	USD float64 `json:"usd"`
+}
+
+type Response map[string]TokenPrice
+
+func (c *Client) GetTokenPrice(tokenName string) (Response, error) {
 	c.LogRequest("GetTokenPrices")
 	data, err := c.HTTPClient.Get(c.BaseURL + "/simple/price?ids=" + tokenName + "&vs_currencies=usd")
 	if err != nil {
-		return TokenPriceResponse{}, err
+		return Response{}, err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			c.LogRequest("Error closing body", err.Error())
-		}
-	}(data.Body)
+	defer data.Body.Close()
 
-	var res TokenPriceResponse
+	var res Response
 	err = json.NewDecoder(data.Body).Decode(&res)
 	if err != nil {
-		return TokenPriceResponse{}, err
+		return Response{}, err
 	}
 
 	return res, nil
@@ -144,7 +140,7 @@ func (c *Client) GetDeFiData() (DefiDataRes, error) {
 }
 
 func (c *Client) LogRequest(method ...string) {
-	c.Logger.Printf("[I] v", method)
+	c.Logger.Printf("[I] %v", method)
 }
 
 func (c *Client) LogError(error ...string) {

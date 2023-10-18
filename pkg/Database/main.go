@@ -23,7 +23,7 @@ func NewDatabase() *Database {
 		os.Exit(1)
 	}
 	return &Database{db,
-		log.New(log.Writer(), "Database", log.LstdFlags)}
+		log.New(log.Writer(), "Database ", log.LstdFlags)}
 }
 
 func (d *Database) CreateTables() error {
@@ -118,6 +118,7 @@ func (d *Database) UpdateGuild(g discord.GuildConfiguration) error {
 }
 
 func (d *Database) RemoveGuild(id string) error {
+	d.LogRequest("Removing guild ", id)
 	_, err := d.Exec(`DELETE FROM guilds WHERE id = ?`, id)
 	if err != nil {
 		return err
@@ -126,9 +127,9 @@ func (d *Database) RemoveGuild(id string) error {
 }
 
 func (d *Database) LogRequest(message ...string) {
-	log.Printf("[I] %v", message)
+	d.Logger.Printf("[I] %v", message)
 }
 
 func (d *Database) LogError(error ...string) {
-	log.Printf("[E] %v", error)
+	d.Logger.Printf("[E] %v", error)
 }

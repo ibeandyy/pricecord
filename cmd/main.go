@@ -20,8 +20,9 @@ func main() {
 
 	c := controller.NewController(*token)
 
-	go c.Initialize()
+	c.Initialize()
 	defer c.Close()
+	go c.ListenToEvents()
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
