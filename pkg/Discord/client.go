@@ -165,7 +165,6 @@ func (a *Application) ModifyField(g *GuildConfiguration, name, value string) err
 	if err != nil {
 		return err
 	}
-
 	if len(msg.Embeds) == 0 {
 		return errors.New("no embeds in the message")
 	}
@@ -189,21 +188,29 @@ EmbLoop:
 
 			}
 		}
+
 		if len(emb.Fields) <= 24 {
 			emb.Fields = append(emb.Fields, &discordgo.MessageEmbedField{
 				Name:   name,
 				Value:  value,
 				Inline: true,
 			})
+			if len(emb.Fields) > 0 {
+				emb.Description = ""
+			} else {
+				if eIdx == 0 {
+					emb.Description = "Use the /track-* commands to add something for me to track!"
+				}
+			}
 			break EmbLoop
 		}
+
 	}
 
 	_, err = a.Client.ChannelMessageEditComplex(&discordgo.MessageEdit{
 		ID:      msg.ID,
 		Channel: msg.ChannelID,
 		Embeds:  msg.Embeds,
-		Content: nil,
 	})
 	return err
 }

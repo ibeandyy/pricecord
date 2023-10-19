@@ -48,7 +48,11 @@ func (c *Controller) Initialize() {
 	c.DefaultTokens = tokens
 
 	for _, token := range tokens {
-		c.TokenCache[strings.ToLower(token.Name)] = token
+		c.TokenCache[strings.ToLower(token.Name)] = &http.Token{
+			ID:     strings.ToLower(token.ID),
+			Symbol: strings.ToLower(token.Symbol),
+			Name:   strings.ToLower(token.Name),
+		}
 	}
 
 	guilds, err := c.Database.GetConfig()
@@ -130,14 +134,9 @@ func (c *Controller) ListenToEvents() {
 
 			event.Response <- true
 		case discord.RemoveToken:
-			tkn, gTkns := event.Name, event.Guild.ConfiguredTokens
-			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
-			if !ok {
-				c.LogError("guild not found in map")
-				event.Response <- false
-				continue
-			}
-			for _, gTkn := range gTkns {
+			tkn, guild := event.Name, event.Guild
+			tkn = strings.ToLower(tkn)
+			for _, gTkn := range guild.ConfiguredTokens {
 
 				if tkn == gTkn.Name {
 					c.DiscordClient.GuildMapMutex.Lock()
@@ -203,13 +202,7 @@ func (c *Controller) ListenToEvents() {
 
 		case discord.RemoveOther:
 			c.LogRequest("Received RemoveOther Event")
-			newStat := event.Stat
-			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
-			if !ok {
-				c.LogError("guild not found in map")
-				event.Response <- false
-				continue
-			}
+			newStat, guild := event.Stat, event.Guild
 
 			for _, stat := range guild.ConfiguredOthers {
 

@@ -94,7 +94,7 @@ func (a *Application) RemoveToken(s *discordgo.Session, i *discordgo.Interaction
 		}
 
 		_, err = s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
-			Content: "Token " + tkn + " added to tracking list.",
+			Content: "Token " + tkn + " removed from tracking list.",
 		})
 
 	case discordgo.InteractionApplicationCommandAutocomplete:
