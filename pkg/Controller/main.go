@@ -17,8 +17,8 @@ type Controller struct {
 	Database      *database.Database
 	HTTPClient    *http.Client
 	Logger        *log.Logger
-	TokenCache    map[string]http.Token
-	DefaultTokens []http.Token
+	TokenCache    map[string]*http.Token
+	DefaultTokens []*http.Token
 }
 
 // NewController returns a new controller
@@ -28,8 +28,8 @@ func NewController(token string) *Controller {
 		Database:      database.NewDatabase(),
 		HTTPClient:    http.NewClient(),
 		Logger:        log.New(log.Writer(), "Controller ", log.LstdFlags),
-		TokenCache:    make(map[string]http.Token),
-		DefaultTokens: []http.Token{},
+		TokenCache:    make(map[string]*http.Token),
+		DefaultTokens: []*http.Token{},
 	}
 }
 
@@ -71,7 +71,6 @@ func (c *Controller) ListenToEvents() {
 		c.LogRequest("Responding to event")
 		switch event.Type {
 		case discord.TrackToken:
-			c.LogRequest("Received TrackToken Event")
 			tkn, gTkns := event.Name, event.Guild.ConfiguredTokens
 			tkn = strings.ToLower(tkn)
 			newTrackToken, ok := c.TokenCache[tkn]
@@ -96,13 +95,14 @@ func (c *Controller) ListenToEvents() {
 				event.Response <- false
 				continue
 			}
+
 			if _, ok := res[tkn]; !ok {
 				c.LogError("error getting token price")
 				event.Response <- false
 				continue
 			}
-			price := fmt.Sprintf("$%.2f", res[tkn].USD)
 
+			price := fmt.Sprintf("$%.2f", res[tkn].USD)
 			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
 			if !ok {
 				c.LogError("guild not found in map")
@@ -111,7 +111,7 @@ func (c *Controller) ListenToEvents() {
 			}
 
 			c.DiscordClient.GuildMapMutex.Lock()
-			c.DiscordClient.ConfigureGuild(guild, []http.Token{newTrackToken}, make([]discord.OtherStat, 0), false)
+			c.DiscordClient.ConfigureGuild(guild, []*http.Token{newTrackToken}, []*discord.OtherStat{}, false)
 			c.DiscordClient.GuildMapMutex.Unlock()
 			err = c.DiscordClient.ModifyField(guild, tkn, price)
 			if err != nil {
@@ -119,15 +119,17 @@ func (c *Controller) ListenToEvents() {
 				event.Response <- false
 				continue
 			}
+			c.LogRequest("DEBUG LOG: ", c.DiscordClient.GuildMap[guild.ID].ConfiguredTokens[0].ID)
+			c.LogRequest("DEBUG LOG: ", guild.ConfiguredTokens[0].Name)
 			err = c.Database.UpdateGuild(guild)
 			if err != nil {
 				c.LogError("Error updating guild", err.Error())
 				event.Response <- false
 				continue
 			}
+
 			event.Response <- true
 		case discord.RemoveToken:
-			c.LogRequest("Received RemoveToken Event")
 			tkn, gTkns := event.Name, event.Guild.ConfiguredTokens
 			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
 			if !ok {
@@ -138,9 +140,8 @@ func (c *Controller) ListenToEvents() {
 			for _, gTkn := range gTkns {
 
 				if tkn == gTkn.Name {
-
 					c.DiscordClient.GuildMapMutex.Lock()
-					c.DiscordClient.ConfigureGuild(guild, []http.Token{gTkn}, make([]discord.OtherStat, 0), true)
+					c.DiscordClient.ConfigureGuild(guild, []*http.Token{gTkn}, make([]*discord.OtherStat, 0), true)
 					c.DiscordClient.GuildMapMutex.Unlock()
 				}
 			}
@@ -161,10 +162,8 @@ func (c *Controller) ListenToEvents() {
 			event.Response <- true
 
 		case discord.Autocomplete:
-			c.LogRequest("Received Autocomplete Event")
 			c.routeAutoComplete(event)
 		case discord.TrackOther:
-			c.LogRequest("Received TrackOther Event")
 			newStat := event.Stat
 			guild, ok := c.DiscordClient.GuildMap[event.Guild.ID]
 			if !ok {
@@ -177,7 +176,7 @@ func (c *Controller) ListenToEvents() {
 
 				if stat.Name == newStat {
 					c.DiscordClient.GuildMapMutex.Lock()
-					c.DiscordClient.ConfigureGuild(guild, make([]http.Token, 0), []discord.OtherStat{stat}, false)
+					c.DiscordClient.ConfigureGuild(guild, make([]*http.Token, 0), []*discord.OtherStat{stat}, false)
 					c.DiscordClient.GuildMapMutex.Unlock()
 				}
 			}
@@ -216,7 +215,7 @@ func (c *Controller) ListenToEvents() {
 
 				if stat.Name == newStat {
 					c.DiscordClient.GuildMapMutex.Lock()
-					c.DiscordClient.ConfigureGuild(guild, make([]http.Token, 0), []discord.OtherStat{stat}, true)
+					c.DiscordClient.ConfigureGuild(guild, make([]*http.Token, 0), []*discord.OtherStat{stat}, true)
 					c.DiscordClient.GuildMapMutex.Unlock()
 				}
 			}
@@ -261,7 +260,7 @@ func (c *Controller) ListenToEvents() {
 }
 
 func (c *Controller) HandleACAddCurr(e discord.Event) {
-	var matches []http.Token
+	var matches []*http.Token
 	userInput := e.ACValue
 	fmt.Println("USER INPUT IS ", userInput)
 	if userInput == "" {
@@ -270,7 +269,7 @@ func (c *Controller) HandleACAddCurr(e discord.Event) {
 		return
 	}
 	userInputLower := strings.ToLower(userInput)
-	var defaultTokens []http.Token
+	var defaultTokens []*http.Token
 	//for _, token := range c.TokenCache {
 	//	defaultTokens = append(defaultTokens, token)
 	//	if strings.Contains(strings.ToLower(token.ID), userInputLower) ||
@@ -291,7 +290,7 @@ func (c *Controller) HandleACAddCurr(e discord.Event) {
 }
 
 func (c *Controller) HandleACRemoveCurr(e discord.Event) {
-	var matches []http.Token
+	var matches []*http.Token
 	userInput := e.ACValue
 	if userInput == "" {
 		e.ACResponse <- c.ConvertTokenToChoice(e.Guild.ConfiguredTokens)

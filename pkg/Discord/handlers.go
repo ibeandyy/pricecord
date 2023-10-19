@@ -215,7 +215,7 @@ func (a *Application) handleAutoComplete(s *discordgo.Session, i *discordgo.Inte
 	}
 }
 
-func (a *Application) getGuildReadLock(guildID string) GuildConfiguration {
+func (a *Application) getGuildReadLock(guildID string) *GuildConfiguration {
 	a.GuildMapMutex.RLock()
 	guild := a.GuildMap[guildID]
 	a.GuildMapMutex.RUnlock()

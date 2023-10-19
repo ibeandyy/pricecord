@@ -6,7 +6,7 @@ import (
 	http "pricecord/pkg/HTTP"
 )
 
-func (c *Controller) ConvertTokenToChoice(token []http.Token) []*discordgo.ApplicationCommandOptionChoice {
+func (c *Controller) ConvertTokenToChoice(token []*http.Token) []*discordgo.ApplicationCommandOptionChoice {
 	var choices []*discordgo.ApplicationCommandOptionChoice
 	if len(token) == 0 {
 		token = c.DefaultTokens
@@ -24,7 +24,7 @@ func (c *Controller) ConvertTokenToChoice(token []http.Token) []*discordgo.Appli
 
 }
 
-func (c *Controller) DefaultTokenCheck(list []*discordgo.ApplicationCommandOptionChoice, defaultTokens []http.Token) []*discordgo.ApplicationCommandOptionChoice {
+func (c *Controller) DefaultTokenCheck(list []*discordgo.ApplicationCommandOptionChoice, defaultTokens []*http.Token) []*discordgo.ApplicationCommandOptionChoice {
 	if len(list) > 0 && len(list) <= 25 {
 		return list
 	} else {
@@ -33,7 +33,7 @@ func (c *Controller) DefaultTokenCheck(list []*discordgo.ApplicationCommandOptio
 
 }
 
-func OutputConfiguredTokens(input string, g discord.GuildConfiguration) []http.Token {
+func OutputConfiguredTokens(input string, g *discord.GuildConfiguration) []*http.Token {
 	if input == "" {
 		return g.ConfiguredTokens
 	}

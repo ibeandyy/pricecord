@@ -17,7 +17,7 @@ type Application struct {
 	RegisteredCommands []*discordgo.ApplicationCommand
 	HandlerMap         map[string]HandlerFunc
 	GuildMapMutex      sync.RWMutex
-	GuildMap           map[string]GuildConfiguration
+	GuildMap           map[string]*GuildConfiguration
 	Logger             *log.Logger
 	Event              chan Event
 }
@@ -29,8 +29,8 @@ type OtherStat struct {
 
 type GuildConfiguration struct {
 	ID               string
-	ConfiguredTokens []http.Token
-	ConfiguredOthers []OtherStat
+	ConfiguredTokens []*http.Token
+	ConfiguredOthers []*OtherStat
 	ChannelID        string
 	MessageID        string
 	LastChecked      time.Time
@@ -59,7 +59,7 @@ func NewApplication(token string) *Application {
 	}
 	app := &Application{
 		Client:   Client,
-		GuildMap: make(map[string]GuildConfiguration),
+		GuildMap: make(map[string]*GuildConfiguration),
 		HandlerMap: map[string]HandlerFunc{
 			"track-token": func(a *Application, s *discordgo.Session, i *discordgo.InteractionCreate) {
 				go a.TrackToken(s, i)
@@ -158,7 +158,7 @@ func (a *Application) SendEmbed(gCfg GuildConfiguration) error {
 // ModifyField updates the fields of the embed
 // If the token is not found, a new field is added
 // If the provided price string is empty, the field is removed
-func (a *Application) ModifyField(g GuildConfiguration, name, value string) error {
+func (a *Application) ModifyField(g *GuildConfiguration, name, value string) error {
 	a.LogRequest("modifying embed for guild ", g.ID, "in channel ", g.ChannelID)
 
 	msg, err := a.Client.ChannelMessage(g.ChannelID, g.MessageID)
@@ -222,10 +222,10 @@ func (a *Application) InitGuildConfig(guildID string) error {
 		return err
 	}
 
-	a.GuildMap[guildID] = GuildConfiguration{
+	a.GuildMap[guildID] = &GuildConfiguration{
 		ID:               guildID,
-		ConfiguredTokens: []http.Token{},
-		ConfiguredOthers: []OtherStat{},
+		ConfiguredTokens: []*http.Token{},
+		ConfiguredOthers: []*OtherStat{},
 		ChannelID:        ch.ID,
 		MessageID:        msg.ID,
 		LastChecked:      time.Now(),
@@ -244,52 +244,35 @@ func (a *Application) InitGuildConfig(guildID string) error {
 
 }
 
-func (a *Application) ConfigureGuild(g GuildConfiguration, newTokens []http.Token, newOther []OtherStat, delete bool) {
+func (a *Application) ConfigureGuild(g *GuildConfiguration, newTokens []*http.Token, newOther []*OtherStat, delete bool) {
 	a.LogRequest("configuring guild", g.ID)
-	cfg, ok := a.GuildMap[g.ID]
-	if !ok {
-		err := a.InitGuildConfig(g.ID)
-		if err != nil {
-			a.LogError("error initializing guild", err.Error())
-			return
-		}
-		cfg = a.GuildMap[g.ID]
-	}
-	if cfg.ChannelID != "" {
-		cfg.ChannelID = g.ChannelID
-	}
-	if cfg.MessageID != "" {
-		cfg.MessageID = g.MessageID
 
-	}
-	if len(cfg.ConfiguredTokens) > 0 {
-		if delete {
-			for i, tkn := range cfg.ConfiguredTokens {
-				for _, newTkn := range newTokens {
-					if tkn.ID == newTkn.ID {
-						cfg.ConfiguredTokens = append(cfg.ConfiguredTokens[:i], cfg.ConfiguredTokens[i+1:]...)
-					}
+	if delete {
+		for i, tkn := range g.ConfiguredTokens {
+			for _, newTkn := range newTokens {
+				if tkn.ID == newTkn.ID {
+					g.ConfiguredTokens = append(g.ConfiguredTokens[:i], g.ConfiguredTokens[i+1:]...)
 				}
 			}
-		} else {
-			cfg.ConfiguredTokens = append(cfg.ConfiguredTokens, newTokens...)
 		}
+	} else {
+		g.ConfiguredTokens = append(g.ConfiguredTokens, newTokens...)
 	}
-	if len(cfg.ConfiguredOthers) > 0 {
-		if delete {
-			for i, stat := range cfg.ConfiguredOthers {
-				for _, newStat := range newOther {
-					if stat.Name == newStat.Name {
-						cfg.ConfiguredOthers = append(cfg.ConfiguredOthers[:i], cfg.ConfiguredOthers[i+1:]...)
-					}
+
+	if delete {
+		for i, stat := range g.ConfiguredOthers {
+			for _, newStat := range newOther {
+				if stat.Name == newStat.Name {
+					g.ConfiguredOthers = append(g.ConfiguredOthers[:i], g.ConfiguredOthers[i+1:]...)
 				}
 			}
-		} else {
-			cfg.ConfiguredOthers = append(cfg.ConfiguredOthers, newOther...)
 		}
-	}
-	a.GuildMap[g.ID] = cfg
 
+	} else {
+		g.ConfiguredOthers = append(g.ConfiguredOthers, newOther...)
+	}
+	//gld := a.GuildMap[g.ID]
+	//gld.ConfiguredTokens = g.ConfiguredTokens
 }
 
 func (a *Application) Close() error {

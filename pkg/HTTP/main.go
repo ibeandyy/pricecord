@@ -30,7 +30,7 @@ type Token struct {
 	Name   string `json:"name"`
 }
 
-func (c *Client) GetTokens() ([]Token, error) {
+func (c *Client) GetTokens() ([]*Token, error) {
 	c.LogRequest("GetTokens")
 	data, err := c.HTTPClient.Get(c.BaseURL + "/coins/list")
 	if err != nil {
@@ -44,7 +44,7 @@ func (c *Client) GetTokens() ([]Token, error) {
 		}
 	}(data.Body)
 
-	var res []Token
+	var res []*Token
 	err = json.NewDecoder(data.Body).Decode(&res)
 	if err != nil {
 		c.LogError("Error decoding json", err.Error())

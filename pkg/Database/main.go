@@ -48,9 +48,9 @@ func (d *Database) CreateTables() error {
 	return nil
 }
 
-func (d *Database) GetConfig() ([]discord.GuildConfiguration, error) {
+func (d *Database) GetConfig() ([]*discord.GuildConfiguration, error) {
 	d.LogRequest("Getting guilds")
-	var gs []discord.GuildConfiguration
+	var gs []*discord.GuildConfiguration
 	rows, err := d.Query(`SELECT * FROM guilds`)
 	if err != nil {
 		d.LogError("Error getting guilds", err.Error())
@@ -63,7 +63,7 @@ func (d *Database) GetConfig() ([]discord.GuildConfiguration, error) {
 		}
 	}()
 	for rows.Next() {
-		var g discord.GuildConfiguration
+		g := &discord.GuildConfiguration{}
 		var tokensJSON, othersJSON string
 		err := rows.Scan(&g.ID, &tokensJSON, &othersJSON, &g.ChannelID, &g.MessageID, &g.LastChecked)
 		if err != nil {
@@ -93,7 +93,7 @@ func (d *Database) GetGuild(id string) (discord.GuildConfiguration, error) {
 
 	return g, nil
 }
-func (d *Database) AddGuild(g discord.GuildConfiguration) error {
+func (d *Database) AddGuild(g *discord.GuildConfiguration) error {
 	d.LogRequest("Adding guild ", g.ID)
 	tokensJSON, _ := json.Marshal(g.ConfiguredTokens)
 	othersJSON, _ := json.Marshal(g.ConfiguredOthers)
@@ -105,7 +105,7 @@ func (d *Database) AddGuild(g discord.GuildConfiguration) error {
 	return nil
 }
 
-func (d *Database) UpdateGuild(g discord.GuildConfiguration) error {
+func (d *Database) UpdateGuild(g *discord.GuildConfiguration) error {
 	d.LogRequest("Updating guild ", g.ID)
 	tokensJSON, _ := json.Marshal(g.ConfiguredTokens)
 	othersJSON, _ := json.Marshal(g.ConfiguredOthers)
